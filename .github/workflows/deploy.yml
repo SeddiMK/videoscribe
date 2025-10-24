@@ -3,35 +3,35 @@ name: Deploy to Server videoscribe.zvon.online
 on:
   push:
     branches:
-      - master # триггер на пуш в master
+      - master
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Получаем код репозитория
+      # 1. Получаем код
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Настройка Node.js
+      # 2. Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      # 3. Установка зависимостей (БЕЗ NODE_ENV=production!)
+      # 3. Установка зависимостей
       - name: Install dependencies
         run: npm ci
 
-      # 4. Сборка проекта локально
+      # 4. Сборка проекта
       - name: Build project
         run: npm run build
         env:
           NODE_ENV: production
 
-      # 5. Настройка SSH ключа
+      # 5. SSH ключ — используем тот же, что и на основном домене
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -47,7 +47,7 @@ jobs:
           ${{ secrets.ENV_VARS }}
           EOF
 
-      # 7. Копируем только необходимые файлы на сервер
+      # 7. Копируем файлы на сервер в отдельную директорию для videoscribe
       - name: Sync code to server
         run: |
           rsync -avz --delete \
@@ -58,45 +58,38 @@ jobs:
             --exclude '*.log' \
             --exclude 'README.md' \
             -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-            ./ root@${{ secrets.SERVER_IP }}:/var/www/zvon/
+            ./ root@${{ secrets.SERVER_IP }}:/var/www/videoscribe/
 
           # Копируем .env отдельно
           scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-            .env.production root@${{ secrets.SERVER_IP }}:/var/www/zvon/.env
+            .env.production root@${{ secrets.SERVER_IP }}:/var/www/videoscribe/.env
 
-      # 8. Деплой через docker-compose на сервере
+      # 8. Деплой через docker-compose
       - name: Deploy with Docker Compose
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'ENDSSH'
-            cd /var/www/zvon
-            
-            # Создаем бэкап текущей версии
+            cd /var/www/videoscribe
+
+            # Бэкап (опционально)
             docker-compose ps -q | xargs -r docker inspect \
               --format='{{.Name}} {{.Config.Image}}' > .backup_images
-            
-            # Останавливаем старые контейнеры
+
             docker-compose down
-            
-            # Запускаем новую версию
             docker-compose up -d --build --remove-orphans
-            
-            # Ждем запуска сервисов
+
             sleep 10
-            
-            # Проверяем что контейнеры запущены
+
             if ! docker-compose ps | grep -q "Up"; then
               echo "⚠️  Deployment failed! Rolling back..."
               docker-compose down
               exit 1
             fi
-            
-            # Очищаем только dangling образы
+
             docker image prune -f
-            
             echo "✅ Deployment successful!"
           ENDSSH
 
-      # 9. Проверка здоровья приложения
+      # 9. Health check
       - name: Health check
         run: |
           sleep 5
@@ -107,16 +100,11 @@ jobs:
           fi
           echo "✅ Application is healthy!"
 
-      # 10. Уведомление об успешном деплое (опционально)
+      # 10. Уведомления
       - name: Notify success
         if: success()
-        run: |
-          echo "🚀 Deployment to zvon.online completed successfully!"
-          # Здесь можно добавить отправку уведомления в Telegram/Slack
+        run: echo "🚀 Deployment to videoscribe.zvon.online completed successfully!"
 
-      # 11. Уведомление об ошибке
       - name: Notify failure
         if: failure()
-        run: |
-          echo "❌ Deployment to zvon.online failed!"
-          # Здесь можно добавить отправку уведомления об ошибке
+        run: echo "❌ Deployment to videoscribe.zvon.online failed!"
