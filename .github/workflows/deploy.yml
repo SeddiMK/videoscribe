@@ -3,7 +3,7 @@ name: Deploy to Server zvon.online
 on:
   push:
     branches:
-      - master # триггер на пуш в master
+      - master
 
 jobs:
   build-and-deploy:
@@ -14,7 +14,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Настройка SSH ключа для доступа к серверу
+      # 2. Настройка SSH ключа
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -22,7 +22,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      # 3. Создание .env файлов из секретов и vars (опционально)
+      # 3. Сборка проекта
+      - name: Build project
+        run: |
+          npm ci
+          npm run build
+
+      # 4. Создание .env файлов
       - name: Create .env files
         uses: thaind0/envfile@v1
         with:
@@ -37,29 +43,28 @@ jobs:
           file: vars.env
           exclude: DEV_*, AI_*
 
-      - name: Build project locally
+      # 5. Копирование нужных файлов на сервер
+      - name: Upload build and configs
         run: |
-          rm -rf dist
-          npm install
-          npm run build
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            ./ root@${{ secrets.SERVER_IP }}:/opt/videoscribe/
 
-      # 4. Копируем репозиторий и env на сервер
-      - name: Sync code to server
-        run: |
           rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-          ./ root@${{ secrets.SERVER_IP }}:/var/www/zvon/
-          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-          vars.env secrets.env root@${{ secrets.SERVER_IP }}:/opt/videoscribe/
+            vars.env secrets.env root@${{ secrets.SERVER_IP }}:/opt/videoscribe/
 
-      # 5. Деплой через docker-compose на сервере
+      # 6. Деплой через docker-compose
       - name: Deploy on server
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} "
-            cd /opt/videoscribe/
-            cat ./vars.env > ./.env
-            cat ./secrets.env >> ./.env
-            sed -i 's/MASTER_//g' ./.env
+            cd /opt/videoscribe
+            cat vars.env > .env
+            cat secrets.env >> .env
+            sed -i 's/MASTER_//g' .env
             docker-compose down
-            docker-compose up -d --build
+            docker-compose up -d --build --remove-orphans
             docker system prune -af
           "
