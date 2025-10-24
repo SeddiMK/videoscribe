@@ -55,7 +55,7 @@ jobs:
       - name: Deploy on server
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} "
-            cd /var/www/zvon
+            cd /opt/videoscribe/
             cat ./vars.env > ./.env
             cat ./secrets.env >> ./.env
             sed -i 's/MASTER_//g' ./.env
