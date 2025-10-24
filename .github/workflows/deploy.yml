@@ -21,15 +21,17 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      # 3. Сборка проекта локально
+      # 3. Установка зависимостей (БЕЗ NODE_ENV=production!)
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Сборка проекта локально
       - name: Build project
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
         env:
           NODE_ENV: production
 
-      # 4. Настройка SSH ключа
+      # 5. Настройка SSH ключа
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -37,7 +39,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      # 5. Создание .env файла
+      # 6. Создание .env файла
       - name: Create .env file
         run: |
           cat > .env.production << EOF
@@ -45,7 +47,7 @@ jobs:
           ${{ secrets.ENV_VARS }}
           EOF
 
-      # 6. Копируем только необходимые файлы на сервер
+      # 7. Копируем только необходимые файлы на сервер
       - name: Sync code to server
         run: |
           rsync -avz --delete \
@@ -62,7 +64,7 @@ jobs:
           scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
             .env.production root@${{ secrets.SERVER_IP }}:/var/www/zvon/.env
 
-      # 7. Деплой через docker-compose на сервере
+      # 8. Деплой через docker-compose на сервере
       - name: Deploy with Docker Compose
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'ENDSSH'
@@ -85,7 +87,6 @@ jobs:
             if ! docker-compose ps | grep -q "Up"; then
               echo "⚠️  Deployment failed! Rolling back..."
               docker-compose down
-              # Здесь можно добавить логику отката
               exit 1
             fi
             
@@ -95,7 +96,7 @@ jobs:
             echo "✅ Deployment successful!"
           ENDSSH
 
-      # 8. Проверка здоровья приложения
+      # 9. Проверка здоровья приложения
       - name: Health check
         run: |
           sleep 5
@@ -106,14 +107,14 @@ jobs:
           fi
           echo "✅ Application is healthy!"
 
-      # 9. Уведомление об успешном деплое (опционально)
+      # 10. Уведомление об успешном деплое (опционально)
       - name: Notify success
         if: success()
         run: |
           echo "🚀 Deployment to zvon.online completed successfully!"
           # Здесь можно добавить отправку уведомления в Telegram/Slack
 
-      # 10. Уведомление об ошибке
+      # 11. Уведомление об ошибке
       - name: Notify failure
         if: failure()
         run: |
