@@ -1,18 +1,45 @@
-version: '3'
+version: '3.8'
 
 services:
   frontend:
-    # mem_limit: 4g
-    # memswap_limit: 6g
     container_name: ${COMPOSE_PROJECT_NAME}
     restart: unless-stopped
     build:
       context: .
+      dockerfile: Dockerfile
     ports:
-      - '${NGINX_PORT}:3000'
+      # Слушаем только на localhost, чтобы nginx мог проксировать
+      - '127.0.0.1:${NGINX_PORT}:80'
+    volumes:
+      # Монтируем папки для загрузок, результатов и логов
+      - ./uploads:/app/uploads
+      - ./results:/app/results
+      - ./logs:/app/logs
     env_file:
       - .env
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=4096
       - NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - videoscribe-network
+    # Лимиты ресурсов (опционально)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+networks:
+  videoscribe-network:
+    driver: bridge
+    name: videoscribe-network
