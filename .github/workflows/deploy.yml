@@ -49,7 +49,7 @@ jobs:
           rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
           ./ root@${{ secrets.SERVER_IP }}:/var/www/zvon/
           rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-          vars.env secrets.env root@${{ secrets.SERVER_IP }}:/var/www/zvon/
+          vars.env secrets.env root@${{ secrets.SERVER_IP }}:/opt/videoscribe/
 
       # 5. Деплой через docker-compose на сервере
       - name: Deploy on server
