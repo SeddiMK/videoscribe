@@ -1,37 +1,20 @@
-name: Deploy to Server videoscribe.zvon.online
+name: Deploy to Server zvon.online
 
 on:
   push:
     branches:
-      - master
+      - master # триггер на пуш в master
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Получаем код
+      # 1. Получаем код репозитория
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      # 2. Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      # 3. Установка зависимостей
-      - name: Install dependencies
-        run: npm ci
-
-      # 4. Сборка проекта
-      - name: Build project
-        run: npm run build
-        env:
-          NODE_ENV: production
-
-      # 5. SSH ключ — используем тот же, что и на основном домене
+      # 2. Настройка SSH ключа для доступа к серверу
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -39,72 +22,44 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
-      # 6. Создание .env файла
-      - name: Create .env file
-        run: |
-          cat > .env.production << EOF
-          NODE_ENV=production
-          ${{ secrets.ENV_VARS }}
-          EOF
+      # 3. Создание .env файлов из секретов и vars (опционально)
+      - name: Create .env files
+        uses: thaind0/envfile@v1
+        with:
+          secrets: ${{ toJSON(secrets) }}
+          file: secrets.env
+          exclude: SERVER_*, DEV_*, AI_*
 
-      # 7. Копируем файлы на сервер в отдельную директорию для videoscribe
+      - name: Create vars.env
+        uses: thaind0/envfile@v1
+        with:
+          secrets: ${{ toJSON(vars) }}
+          file: vars.env
+          exclude: DEV_*, AI_*
+
+      - name: Build project locally
+        run: |
+          rm -rf dist
+          npm install
+          npm run build
+
+      # 4. Копируем репозиторий и env на сервер
       - name: Sync code to server
         run: |
-          rsync -avz --delete \
-            --exclude 'node_modules' \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude '.env*' \
-            --exclude '*.log' \
-            --exclude 'README.md' \
-            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-            ./ root@${{ secrets.SERVER_IP }}:/var/www/videoscribe/
+          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          ./ root@${{ secrets.SERVER_IP }}:/var/www/zvon/
+          rsync -avz -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+          vars.env secrets.env root@${{ secrets.SERVER_IP }}:/var/www/zvon/
 
-          # Копируем .env отдельно
-          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
-            .env.production root@${{ secrets.SERVER_IP }}:/var/www/videoscribe/.env
-
-      # 8. Деплой через docker-compose
-      - name: Deploy with Docker Compose
+      # 5. Деплой через docker-compose на сервере
+      - name: Deploy on server
         run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'ENDSSH'
-            cd /var/www/videoscribe
-
-            # Бэкап (опционально)
-            docker-compose ps -q | xargs -r docker inspect \
-              --format='{{.Name}} {{.Config.Image}}' > .backup_images
-
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} "
+            cd /var/www/zvon
+            cat ./vars.env > ./.env
+            cat ./secrets.env >> ./.env
+            sed -i 's/MASTER_//g' ./.env
             docker-compose down
-            docker-compose up -d --build --remove-orphans
-
-            sleep 10
-
-            if ! docker-compose ps | grep -q "Up"; then
-              echo "⚠️  Deployment failed! Rolling back..."
-              docker-compose down
-              exit 1
-            fi
-
-            docker image prune -f
-            echo "✅ Deployment successful!"
-          ENDSSH
-
-      # 9. Health check
-      - name: Health check
-        run: |
-          sleep 5
-          response=$(curl -s -o /dev/null -w "%{http_code}" https://videoscribe.zvon.online)
-          if [ "$response" != "200" ]; then
-            echo "⚠️  Health check failed! Status: $response"
-            exit 1
-          fi
-          echo "✅ Application is healthy!"
-
-      # 10. Уведомления
-      - name: Notify success
-        if: success()
-        run: echo "🚀 Deployment to videoscribe.zvon.online completed successfully!"
-
-      - name: Notify failure
-        if: failure()
-        run: echo "❌ Deployment to videoscribe.zvon.online failed!"
+            docker-compose up -d --build
+            docker system prune -af
+          "
