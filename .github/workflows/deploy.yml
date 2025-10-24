@@ -1,0 +1,121 @@
+name: Deploy to Server videoscribe.zvon.online
+
+on:
+  push:
+    branches:
+      - master # триггер на пуш в master
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Получаем код репозитория
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Настройка Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3. Сборка проекта локально
+      - name: Build project
+        run: |
+          npm ci
+          npm run build
+        env:
+          NODE_ENV: production
+
+      # 4. Настройка SSH ключа
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      # 5. Создание .env файла
+      - name: Create .env file
+        run: |
+          cat > .env.production << EOF
+          NODE_ENV=production
+          ${{ secrets.ENV_VARS }}
+          EOF
+
+      # 6. Копируем только необходимые файлы на сервер
+      - name: Sync code to server
+        run: |
+          rsync -avz --delete \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.env*' \
+            --exclude '*.log' \
+            --exclude 'README.md' \
+            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
+            ./ root@${{ secrets.SERVER_IP }}:/var/www/zvon/
+
+          # Копируем .env отдельно
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+            .env.production root@${{ secrets.SERVER_IP }}:/var/www/zvon/.env
+
+      # 7. Деплой через docker-compose на сервере
+      - name: Deploy with Docker Compose
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'ENDSSH'
+            cd /var/www/zvon
+            
+            # Создаем бэкап текущей версии
+            docker-compose ps -q | xargs -r docker inspect \
+              --format='{{.Name}} {{.Config.Image}}' > .backup_images
+            
+            # Останавливаем старые контейнеры
+            docker-compose down
+            
+            # Запускаем новую версию
+            docker-compose up -d --build --remove-orphans
+            
+            # Ждем запуска сервисов
+            sleep 10
+            
+            # Проверяем что контейнеры запущены
+            if ! docker-compose ps | grep -q "Up"; then
+              echo "⚠️  Deployment failed! Rolling back..."
+              docker-compose down
+              # Здесь можно добавить логику отката
+              exit 1
+            fi
+            
+            # Очищаем только dangling образы
+            docker image prune -f
+            
+            echo "✅ Deployment successful!"
+          ENDSSH
+
+      # 8. Проверка здоровья приложения
+      - name: Health check
+        run: |
+          sleep 5
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://videoscribe.zvon.online)
+          if [ "$response" != "200" ]; then
+            echo "⚠️  Health check failed! Status: $response"
+            exit 1
+          fi
+          echo "✅ Application is healthy!"
+
+      # 9. Уведомление об успешном деплое (опционально)
+      - name: Notify success
+        if: success()
+        run: |
+          echo "🚀 Deployment to zvon.online completed successfully!"
+          # Здесь можно добавить отправку уведомления в Telegram/Slack
+
+      # 10. Уведомление об ошибке
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Deployment to zvon.online failed!"
+          # Здесь можно добавить отправку уведомления об ошибке
