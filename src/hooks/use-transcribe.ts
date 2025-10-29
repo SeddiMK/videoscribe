@@ -9,6 +9,7 @@ const API_URL = 'http://185.250.181.254:3001';
 
 // console.log('IP_ADDRESS', import.meta.env.VITE_IP_ADDRESS);
 
+//TODO: not any
 interface TranscribeResponse {
   text: string;
   [key: string]: any;
