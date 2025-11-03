@@ -12,7 +12,7 @@ export const TranscribeTester: React.FC = () => {
     }
   };
 
-  console.log('result', result);
+  // console.log('result', result);
 
   return (
     <div className='p-4 max-w-xl mx-auto'>
@@ -40,7 +40,7 @@ export const TranscribeTester: React.FC = () => {
       {result && (
         <div className='bg-gray-100 p-4 rounded'>
           <h2 className='font-bold mb-2'>Результат:</h2>
-          <pre className='whitespace-pre-wrap'>{result.text}</pre>
+          <pre className='whitespace-pre-wrap'>{result}</pre>
         </div>
       )}
     </div>
