@@ -40,7 +40,9 @@ export const TranscribeTester: React.FC = () => {
       {result && (
         <div className='bg-gray-100 p-4 rounded'>
           <h2 className='font-bold mb-2'>Результат:</h2>
-          <pre className='whitespace-pre-wrap'>{result}</pre>
+          <pre className='whitespace-pre-wrap'>
+            {result ? result : 'Не результата. result undefined'}
+          </pre>
         </div>
       )}
     </div>
