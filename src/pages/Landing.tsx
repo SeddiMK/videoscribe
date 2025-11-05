@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
+import 'react-lazy-load-image-component/src/effects/blur.css';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Video, FileText, Zap, Lock, Globe, Clock } from 'lucide-react';
@@ -44,7 +46,7 @@ const Landing = () => {
 
       {/* Hero Section */}
       <section className='relative overflow-hidden'>
-        <div className='absolute inset-0 bg-gradient-hero opacity-10'></div>
+        <div className='absolute inset-0 bg-gradient-hero opacity-10 -z-10'></div>
         <div className='container mx-auto px-4 py-20 md:py-32'>
           <div className='grid md:grid-cols-2 gap-12 items-center'>
             <div className='space-y-8'>
@@ -67,6 +69,7 @@ const Landing = () => {
                     Начать бесплатно
                   </Button>
                 </Link>
+
                 <Button
                   variant='outline'
                   size='lg'
@@ -88,11 +91,20 @@ const Landing = () => {
             </div>
             <div className='relative'>
               <div className='absolute inset-0 bg-gradient-primary blur-3xl opacity-20 rounded-full'></div>
-              <img
+              <LazyLoadImage
                 src={heroBanner}
                 alt='Video to Text Transcription'
                 className='relative rounded-2xl shadow-2xl w-full'
+                effect='blur'
+                height='372'
+                width='660'
               />
+              {/* //TODO[2025-11-05]: delete test */}
+              {/* <img
+                src={heroBanner}
+                alt='Video to Text Transcription'
+                className='relative rounded-2xl shadow-2xl w-full'
+              /> */}
             </div>
           </div>
         </div>

@@ -12,7 +12,7 @@ export const TranscribeTester: React.FC = () => {
     }
   };
 
-  // console.log('result', result);
+  console.log('result', result);
 
   return (
     <div className='p-4 max-w-xl mx-auto'>
