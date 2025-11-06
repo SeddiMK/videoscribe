@@ -16,7 +16,9 @@ export const TranscribeTester: React.FC = () => {
 
   return (
     <div className='p-4 max-w-xl mx-auto'>
-      <h1 className='text-xl font-bold mb-4'>Тест транскрипции YouTube</h1>
+      <h1 className='text-xl font-bold mb-4'>
+        Тест транскрипции YouTube (удалить)
+      </h1>
       <form onSubmit={handleSubmit} className='mb-4'>
         <input
           type='text'
